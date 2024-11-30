@@ -5,3 +5,5 @@ include scripts/*.py
 include VERSION
 include requirements.txt
 include facexlib/weights/README.md
+include facexlib/detection/yolov5face/models/yolov5l.yaml
+include facexlib/detection/yolov5face/models/yolov5n.yaml

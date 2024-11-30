@@ -64,7 +64,7 @@ def init_yolov5face_model(model_name, device='cuda', model_rootpath=None):
         raise NotImplementedError(f'{model_name} is not implemented.')
 
     model_path = load_file_from_url(url=model_url, model_dir='facexlib/weights', progress=True, file_name=None, save_dir=model_rootpath)
-    load_net = torch.load(model_path, map_location=lambda storage, loc: storage)
+    load_net = torch.load(model_path, map_location=lambda storage, loc: storage, weights_only=True)
     model.detector.load_state_dict(load_net, strict=True)
     model.detector.eval()
     model.detector = model.detector.to(device).float()
