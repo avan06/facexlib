@@ -12,6 +12,22 @@
 
 ---
 
+## This forked version
+
+synchronizes the facelib improvements made by [CodeFormer](https://github.com/sczhou/CodeFormer) author sczhou into the facexlib library. Many thanks to sczhou for developing the excellent facelib.
+
+Please refer to this [issue](https://github.com/TencentARC/GFPGAN/issues/359):  
+when using face enhancement models (such as GFPGAN or RestoreFormer), pasting the cropped face back onto the original image often results in noticeable lines at the hairline. In the issue, sutte identifies the root cause as the algorithm of mask blur is not well in the original facexlib. It was confirmed that switching to the facelib improved by sczhou resolves this problem.
+
+### Usage:  
+
+Add the following to your `requirements.txt`:  
+```
+git+https://github.com/avan06/facexlib
+```
+
+---
+
 **facexlib** aims at providing ready-to-use **face-related** functions based on current SOTA open-source methods. <br>
 Only PyTorch reference codes are available. For training or fine-tuning, please refer to their original repositories listed below. <br>
 Note that we just provide a collection of these algorithms. You need to refer to their original LICENCEs for your intended use.

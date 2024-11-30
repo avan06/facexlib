@@ -1,11 +1,42 @@
+"""
+From the CodeFormer project by author sczhou.
+"""
 import cv2
 import os
 import os.path as osp
+import re
+import numpy as np
+from PIL import Image
 import torch
 from torch.hub import download_url_to_file, get_dir
 from urllib.parse import urlparse
+# from basicsr.utils.download_util import download_file_from_google_drive
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def download_pretrained_models(file_ids, save_path_root):
+    import gdown
+    
+    os.makedirs(save_path_root, exist_ok=True)
+
+    for file_name, file_id in file_ids.items():
+        file_url = 'https://drive.google.com/uc?id='+file_id
+        save_path = osp.abspath(osp.join(save_path_root, file_name))
+        if osp.exists(save_path):
+            user_response = input(f'{file_name} already exist. Do you want to cover it? Y/N\n')
+            if user_response.lower() == 'y':
+                print(f'Covering {file_name} to {save_path}')
+                gdown.download(file_url, save_path, quiet=False)
+                # download_file_from_google_drive(file_id, save_path)
+            elif user_response.lower() == 'n':
+                print(f'Skipping {file_name}')
+            else:
+                raise ValueError('Wrong input. Only accepts Y/N.')
+        else:
+            print(f'Downloading {file_name} to {save_path}')
+            gdown.download(file_url, save_path, quiet=False)
+            # download_file_from_google_drive(file_id, save_path)
 
 
 def imwrite(img, file_path, params=None, auto_mkdir=True):
@@ -116,3 +147,82 @@ def scandir(dir_path, suffix=None, recursive=False, full_path=False):
                     continue
 
     return _scandir(dir_path, suffix=suffix, recursive=recursive)
+
+
+def is_gray(img, threshold=10):
+    img = Image.fromarray(img)
+    if len(img.getbands()) == 1:
+        return True
+    img1 = np.asarray(img.getchannel(channel=0), dtype=np.int16)
+    img2 = np.asarray(img.getchannel(channel=1), dtype=np.int16)
+    img3 = np.asarray(img.getchannel(channel=2), dtype=np.int16)
+    diff1 = (img1 - img2).var()
+    diff2 = (img2 - img3).var()
+    diff3 = (img3 - img1).var()
+    diff_sum = (diff1 + diff2 + diff3) / 3.0
+    if diff_sum <= threshold:
+        return True
+    else:
+        return False
+
+def rgb2gray(img, out_channel=3):
+    r, g, b = img[:,:,0], img[:,:,1], img[:,:,2]
+    gray = 0.2989 * r + 0.5870 * g + 0.1140 * b
+    if out_channel == 3:
+        gray = gray[:,:,np.newaxis].repeat(3, axis=2)
+    return gray
+
+def bgr2gray(img, out_channel=3):
+    b, g, r = img[:,:,0], img[:,:,1], img[:,:,2]
+    gray = 0.2989 * r + 0.5870 * g + 0.1140 * b
+    if out_channel == 3:
+        gray = gray[:,:,np.newaxis].repeat(3, axis=2)
+    return gray
+
+
+def calc_mean_std(feat, eps=1e-5):
+    """
+    Args:
+        feat (numpy): 3D [w h c]s
+    """
+    size = feat.shape
+    assert len(size) == 3, 'The input feature should be 3D tensor.'
+    c = size[2]
+    feat_var = feat.reshape(-1, c).var(axis=0) + eps
+    feat_std = np.sqrt(feat_var).reshape(1, 1, c)
+    feat_mean = feat.reshape(-1, c).mean(axis=0).reshape(1, 1, c)
+    return feat_mean, feat_std
+
+
+def adain_npy(content_feat, style_feat):
+    """Adaptive instance normalization for numpy.
+
+    Args:
+        content_feat (numpy): The input feature.
+        style_feat (numpy): The reference feature.
+    """
+    size = content_feat.shape
+    style_mean, style_std = calc_mean_std(style_feat)
+    content_mean, content_std = calc_mean_std(content_feat)
+    normalized_feat = (content_feat - np.broadcast_to(content_mean, size)) / np.broadcast_to(content_std, size)
+    return normalized_feat * np.broadcast_to(style_std, size) + np.broadcast_to(style_mean, size)
+
+IS_HIGH_VERSION = [int(m) for m in list(re.findall(r"^([0-9]+)\.([0-9]+)\.([0-9]+)([^0-9][a-zA-Z0-9]*)?(\+git.*)?$",\
+    torch.__version__)[0][:3])] >= [1, 12, 0]
+
+def get_device(gpu_id=None):
+    """
+    From the CodeFormer project by author sczhou.
+    CodeFormer/basicsr/utils/misc.py
+    """
+    if gpu_id is None:
+        gpu_str = ''
+    elif isinstance(gpu_id, int):
+        gpu_str = f':{gpu_id}'
+    else:
+        raise TypeError('Input should be int value.')
+
+    if IS_HIGH_VERSION:
+        if torch.backends.mps.is_available():
+            return torch.device('mps'+gpu_str)
+    return torch.device('cuda'+gpu_str if torch.cuda.is_available() and torch.backends.cudnn.is_available() else 'cpu')

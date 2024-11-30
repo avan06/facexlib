@@ -1,3 +1,6 @@
+"""
+From the CodeFormer project by author sczhou.
+"""
 import cv2
 import numpy as np
 import torch
@@ -213,7 +216,6 @@ if __name__ == '__main__':
 
     from facexlib.detection import init_detection_model
     from facexlib.utils.face_restoration_helper import get_largest_face
-    from facexlib.visualization import visualize_detection
 
     img_path = '/home/wxt/datasets/ffhq/ffhq_wild/00009.png'
     img_name = os.splitext(os.path.basename(img_path))[0]
@@ -232,7 +234,6 @@ if __name__ == '__main__':
     if scale > 1:
         bboxes *= scale  # the score is incorrect
     bboxes = get_largest_face(bboxes, h, w)[0]
-    visualize_detection(img_ori, [bboxes], f'tmp/{img_name}_det.png')
 
     landmarks = np.array([[bboxes[i], bboxes[i + 1]] for i in range(5, 15, 2)])
 
