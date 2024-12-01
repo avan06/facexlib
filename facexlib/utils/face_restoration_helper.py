@@ -10,8 +10,7 @@ from torchvision.transforms.functional import normalize
 from facexlib.detection import init_detection_model
 from facexlib.parsing import init_parsing_model
 from facexlib.utils.misc import img2tensor, imwrite, is_gray, bgr2gray, adain_npy, get_device
-from basicsr.utils.download_util import load_file_from_url
-# from basicsr.utils.misc import get_device
+from facexlib.utils import load_file_from_url
 
 dlib_model_url = {
     'face_detector': 'https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/mmod_human_face_detector-4cb19393.dat',
@@ -68,10 +67,6 @@ class FaceRestoreHelper(object):
                  use_parse=False,
                  device=None,
                  model_rootpath=None):
-        if model_rootpath:
-            import warnings
-            warnings.filterwarnings('always')
-            warnings.warn(f"The model_rootpath({model_rootpath}) parameter you provided has no effect because it has been deprecated in the current version of CodeFormer.", category=DeprecationWarning,)
 
         self.template_3points = template_3points  # improve robustness
         self.upscale_factor = int(upscale_factor)
@@ -125,9 +120,9 @@ class FaceRestoreHelper(object):
 
         # init face detection model
         if self.det_model == 'dlib':
-            self.face_detector, self.shape_predictor_5 = self.init_dlib(dlib_model_url['face_detector'], dlib_model_url['shape_predictor_5'])
+            self.face_detector, self.shape_predictor_5 = self.init_dlib(dlib_model_url['face_detector'], dlib_model_url['shape_predictor_5'], model_rootpath=model_rootpath)
         else:
-            self.face_detector = init_detection_model(det_model, half=False, device=self.device)
+            self.face_detector = init_detection_model(det_model, half=False, device=self.device, model_rootpath=model_rootpath)
 
         # init face parsing model
         self.use_parse = use_parse
@@ -158,14 +153,14 @@ class FaceRestoreHelper(object):
             f = 512.0/min(self.input_img.shape[:2])
             self.input_img = cv2.resize(self.input_img, (0,0), fx=f, fy=f, interpolation=cv2.INTER_LINEAR)
 
-    def init_dlib(self, detection_path, landmark5_path):
+    def init_dlib(self, detection_path, landmark5_path, model_rootpath=None):
         """Initialize the dlib detectors and predictors."""
         try:
             import dlib
         except ImportError:
             print('Please install dlib by running:' 'conda install -c conda-forge dlib')
-        detection_path = load_file_from_url(url=detection_path, model_dir='weights/dlib', progress=True, file_name=None)
-        landmark5_path = load_file_from_url(url=landmark5_path, model_dir='weights/dlib', progress=True, file_name=None)
+        detection_path = load_file_from_url(url=detection_path, model_dir='facexlib/weights', progress=True, file_name=None, model_rootpath=model_rootpath)
+        landmark5_path = load_file_from_url(url=landmark5_path, model_dir='facexlib/weights', progress=True, file_name=None, model_rootpath=model_rootpath)
         face_detector = dlib.cnn_face_detection_model_v1(detection_path)
         shape_predictor_5 = dlib.shape_predictor(landmark5_path)
         return face_detector, shape_predictor_5

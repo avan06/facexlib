@@ -12,8 +12,7 @@ from torchvision.models._utils import IntermediateLayerGetter as IntermediateLay
 from facexlib.detection.align_trans import get_reference_facial_points, warp_and_crop_face
 from facexlib.detection.retinaface import FPN, SSH, MobileNetV1, make_bbox_head, make_class_head, make_landmark_head
 from facexlib.detection.retinaface import (PriorBox, batched_decode, batched_decode_landm, decode, decode_landm, py_cpu_nms)
-
-from basicsr.utils.misc import get_device
+from facexlib.utils.misc import get_device
 # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 device = get_device()
 
