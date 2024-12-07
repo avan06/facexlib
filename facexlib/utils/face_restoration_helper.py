@@ -18,7 +18,21 @@ dlib_model_url = {
 }
 
 def get_largest_face(det_faces, h, w):
+    """
+    This function receives a list of detected faces along with the image's height (h) and width (w), 
+    and returns the largest face from the list based on the area (width x height).
+    
+    Parameters:
+    det_faces (list of tuples): A list of detected faces, each represented as a tuple 
+                                 (left, top, right, bottom) corresponding to the bounding box
+                                 coordinates of a face.
+    h (int): The height of the image.
+    w (int): The width of the image.
 
+    Returns:
+    tuple: The coordinates of the largest face in the format (left, top, right, bottom).
+    int: The index of the largest face in the input list `det_faces`.
+    """
     def get_location(val, length):
         if val < 0:
             return 0
@@ -40,6 +54,24 @@ def get_largest_face(det_faces, h, w):
 
 
 def get_center_face(det_faces, h=0, w=0, center=None):
+    """
+    This function identifies the face that is closest to the specified center of the image, 
+    or the center of the image by default if no center is provided.
+
+    Parameters:
+    det_faces (list of tuples): A list of detected faces, each represented as a tuple 
+                                 (left, top, right, bottom) corresponding to the bounding box
+                                 coordinates of a face.
+    h (int, optional): The height of the image. Default is 0.
+    w (int, optional): The width of the image. Default is 0.
+    center (list or tuple, optional): The coordinates of a point to compare distances against. 
+                                      If not provided, the image center is used.
+
+    Returns:
+    tuple: The coordinates of the face closest to the specified center in the format 
+           (left, top, right, bottom).
+    int: The index of the face closest to the specified center in the input list `det_faces`.
+    """
     if center is not None:
         center = np.array(center)
     else:
@@ -57,7 +89,9 @@ class FaceRestoreHelper(object):
     """Helper for the face restoration pipeline (base class)."""
 
     def __init__(self,
-                 upscale_factor,
+                 upscale_factor=None,
+                 target_width=None,
+                 target_height=None,
                  face_size=512,
                  crop_ratio=(1, 1),
                  det_model='retinaface_resnet50',
@@ -69,11 +103,26 @@ class FaceRestoreHelper(object):
                  model_rootpath=None):
 
         self.template_3points = template_3points  # improve robustness
-        self.upscale_factor = int(upscale_factor)
+
+        # Check for upscale_factor or target dimensions
+        if target_width is not None or target_height is not None:
+            # Verify only one of the target dimensions is set
+            assert not (target_width and target_height), (
+                "Only one of target_width or target_height should be specified."
+            )
+            self.target_width = target_width
+            self.target_height = target_height
+        else:
+            assert upscale_factor is not None, "You must specify upscale_factor or target dimensions."
+            self.upscale_factor = float(upscale_factor)  # Allow float values for more flexibility
+
         # the cropped face ratio based on the square face
         self.crop_ratio = crop_ratio  # (h, w)
-        assert (self.crop_ratio[0] >= 1 and self.crop_ratio[1] >= 1), 'crop ration only supports >=1'
-        self.face_size = (int(face_size * self.crop_ratio[1]), int(face_size * self.crop_ratio[0]))
+        assert (self.crop_ratio[0] >= 1 and self.crop_ratio[1] >= 1), 'crop ratio only supports >=1'
+        self.face_size = (
+            int(face_size * self.crop_ratio[1]), 
+            int(face_size * self.crop_ratio[0])
+        )
         self.det_model = det_model
 
         if self.det_model == 'dlib':
@@ -128,8 +177,21 @@ class FaceRestoreHelper(object):
         self.use_parse = use_parse
         self.face_parse = init_parsing_model(model_name='parsenet', device=self.device)
 
+
     def set_upscale_factor(self, upscale_factor):
         self.upscale_factor = upscale_factor
+
+
+    def calculate_upscale_factor(self, input_img):
+        """Calculate upscale_factor based on target_width or target_height."""
+        h, w, _ = input_img.shape
+
+        if self.target_width is not None:
+            self.upscale_factor = float(self.target_width) / w
+        elif self.target_height is not None:
+            self.upscale_factor = float(self.target_height) / h
+        else:
+            raise ValueError("Either target_width or target_height must be specified.")
 
     def read_image(self, img):
         """img can be image path or cv2 loaded image."""
@@ -153,6 +215,13 @@ class FaceRestoreHelper(object):
             f = 512.0/min(self.input_img.shape[:2])
             self.input_img = cv2.resize(self.input_img, (0,0), fx=f, fy=f, interpolation=cv2.INTER_LINEAR)
 
+        # recalculate upscale_factor
+        if self.target_width is not None or self.target_height is not None:
+            self.calculate_upscale_factor(self.input_img)
+        else:
+            assert self.upscale_factor is not None, "upscale_factor must be specified or calculable."
+
+
     def init_dlib(self, detection_path, landmark5_path, model_rootpath=None):
         """Initialize the dlib detectors and predictors."""
         try:
@@ -165,9 +234,23 @@ class FaceRestoreHelper(object):
         shape_predictor_5 = dlib.shape_predictor(landmark5_path)
         return face_detector, shape_predictor_5
 
+
     def get_face_landmarks_5_dlib(self,
                                 only_keep_largest=False,
                                 scale=1):
+        """
+        This function detects faces in an input image and retrieves 5 facial landmarks (e.g., eyes, nose, and mouth) 
+        for each detected face using the dlib library. It optionally allows filtering to keep only the largest detected face.
+
+        Parameters:
+        only_keep_largest (bool, optional): If set to True, only the largest detected face will be retained for landmark detection.
+                                            Default is False, which means all detected faces will be processed.
+        scale (int, optional): A scaling factor to apply during face detection. Default is 1 (no scaling).
+
+        Returns:
+        int: The number of faces for which 5 facial landmarks were successfully detected. 
+             If no faces are detected, returns 0.
+        """
         det_faces = self.face_detector(self.input_img, scale)
 
         if len(det_faces) == 0:
@@ -203,6 +286,22 @@ class FaceRestoreHelper(object):
                              resize=None,
                              blur_ratio=0.01,
                              eye_dist_threshold=None):
+        """
+        This function detects faces and retrieves the 5 facial landmarks (e.g., eyes, nose, and mouth) for each detected face. 
+        It provides options to filter faces based on size, focus on the largest or center face, and resize the image for better detection. 
+        It also includes an option to apply blurring to padded regions of the image for better consistency in the face region.
+
+        Parameters:
+        only_keep_largest (bool, optional): If set to True, only the largest detected face will be kept. Default is False.
+        only_center_face (bool, optional): If set to True, only the face closest to the center of the image will be kept. Default is False.
+        resize (int, optional): A scaling factor to resize the image before face detection. Default is None (no resizing).
+        blur_ratio (float, optional): The ratio for blurring padded regions. Default is 0.01.
+        eye_dist_threshold (float, optional): A threshold to filter out faces with too small an eye distance (e.g., side faces). Default is None.
+
+        Returns:
+        int: The number of faces for which 5 facial landmarks were successfully detected. 
+             If no faces are detected, returns 0.
+        """
         if self.det_model == 'dlib':
             return self.get_face_landmarks_5_dlib(only_keep_largest)
 
@@ -320,8 +419,23 @@ class FaceRestoreHelper(object):
 
         return len(self.all_landmarks_5)
 
+
     def align_warp_face(self, save_cropped_path=None, border_mode='constant'):
         """Align and warp faces with face template.
+        This function aligns and warps the detected faces in the input image using affine transformation based on 5 facial landmarks. 
+        The aligned faces are then cropped and optionally saved to disk. The function provides support for different border modes 
+        during the image warping process, such as 'constant', 'reflect101', and 'reflect'. If padding and blurring are applied, 
+        the padded images are used instead of the original image.
+
+        Parameters:
+        save_cropped_path (str, optional): The path to save the cropped and aligned faces. 
+                                            If not provided, the faces are not saved to disk.
+        border_mode (str, optional): The method used to fill the borders when the image is warped. 
+                                     Options are 'constant', 'reflect101', and 'reflect'. Default is 'constant'.
+
+        Returns:
+        None: The aligned faces are stored in the `cropped_faces` list. If a `save_cropped_path` is provided, the cropped faces 
+              are saved to disk with sequential filenames.
         """
         if self.pad_blur:
             assert len(self.pad_input_imgs) == len(
@@ -352,10 +466,12 @@ class FaceRestoreHelper(object):
                 save_path = f'{path}_{idx:02d}.{self.save_ext}'
                 imwrite(cropped_face, save_path)
 
+
     def get_inverse_affine(self, save_inverse_affine_path=None):
         """Get inverse affine matrix."""
         for idx, affine_matrix in enumerate(self.affine_matrices):
             inverse_affine = cv2.invertAffineTransform(affine_matrix)
+            # Support float upscale_factor directly
             inverse_affine *= self.upscale_factor
             self.inverse_affine_matrices.append(inverse_affine)
             # save inverse affine matrices
@@ -366,6 +482,19 @@ class FaceRestoreHelper(object):
 
 
     def add_restored_face(self, restored_face, input_face=None):
+        """
+        This function adds a restored face to the list of restored faces. If the image is in grayscale mode, 
+        it converts the restored face to grayscale. If an input face is provided, it applies color transfer 
+        using the Adaptive Instance Normalization (ADAIN) method to match the color of the restored face to the input face.
+
+        Parameters:
+        restored_face (ndarray): The restored face image to be added to the list.
+        input_face (ndarray, optional): An optional input face image used for color transfer. 
+                                         If not provided, no color transfer is performed.
+
+        Returns:
+        None: The restored face is appended to the `restored_faces` list.
+        """
         if self.is_gray:
             restored_face = bgr2gray(restored_face) # convert img into grayscale
             if input_face is not None:
@@ -374,6 +503,19 @@ class FaceRestoreHelper(object):
 
 
     def paste_faces_to_input_image(self, save_path=None, upsample_img=None, draw_box=False, face_upsampler=None):
+        """
+        This function pastes restored faces onto the input image, aligning them using inverse affine transformations. 
+        Optionally, the function can upscale the image, add bounding boxes around the faces, and save the result to a file.
+
+        Parameters:
+        save_path (str, optional): If provided, the resulting image with pasted faces will be saved to this path.
+        upsample_img (ndarray, optional): An image to be upscaled and used as the background. If None, the input image is used.
+        draw_box (bool, optional): If True, bounding boxes will be drawn around the faces in the resulting image.
+        face_upsampler (object, optional): A face upscaler used to enhance the restored faces if provided.
+
+        Returns:
+        ndarray: The image with the pasted faces, either upscaled or the original, depending on the inputs.
+        """
         h, w, _ = self.input_img.shape
         h_up, w_up = int(h * self.upscale_factor), int(w * self.upscale_factor)
 
@@ -518,6 +660,7 @@ class FaceRestoreHelper(object):
             save_path = f'{path}.{self.save_ext}'
             imwrite(upsample_img, save_path)
         return upsample_img
+
 
     def clean_all(self):
         self.all_landmarks_5 = []
