@@ -103,7 +103,9 @@ class FaceRestoreHelper(object):
                  model_rootpath=None):
 
         self.template_3points = template_3points  # improve robustness
-
+        self.target_width = None
+        self.target_height = None
+        self.upscale_factor = None
         # Check for upscale_factor or target dimensions
         if target_width is not None or target_height is not None:
             # Verify only one of the target dimensions is set
