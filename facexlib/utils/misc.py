@@ -10,33 +10,64 @@ from PIL import Image
 import torch
 from torch.hub import download_url_to_file, get_dir
 from urllib.parse import urlparse
-# from basicsr.utils.download_util import download_file_from_google_drive
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def download_pretrained_models(file_ids, save_path_root):
-    import gdown
+def download_from_url(url, file_name, save_dir=None):
+    """
+    Downloads a file from a URL, either using gdown for Google Drive links
+    or a different method for other URLs.
+
+    Parameters:
+    url (str): The URL from which to download the file.
+    file_name (str): The name of the file to be saved.
+    save_dir (str, optional): The directory where the file will be saved. If None, the current directory is used.
+    """
+    if 'drive.google.com' in url:
+        print(f"Using gdown to download {file_name} from Google Drive.")
+        file_id = url.split("id=")[-1]
+        download_pretrained_models({file_name: file_id}, save_dir, True)
+    else:
+        print(f"Using load_file_from_url to download {file_name}.")
+        load_file_from_url(url, file_name=file_name, save_dir=save_dir)
+
+
+def download_pretrained_models(file_ids, save_path_root, skip_existing=False):
+    """
+    Downloads pretrained models from Google Drive using file IDs.
     
+    Parameters:
+    file_ids (dict): A dictionary where keys are file names and values are the corresponding Google Drive file IDs.
+    save_path_root (str): The directory where the files will be saved.
+    skip_existing (bool): If True, skips downloading files that already exist in the target directory.
+    """
+    import os
+    import os.path as osp
+    import gdown
+
     os.makedirs(save_path_root, exist_ok=True)
 
     for file_name, file_id in file_ids.items():
-        file_url = 'https://drive.google.com/uc?id='+file_id
+        file_url = 'https://drive.google.com/uc?id=' + file_id
         save_path = osp.abspath(osp.join(save_path_root, file_name))
+        
         if osp.exists(save_path):
-            user_response = input(f'{file_name} already exist. Do you want to cover it? Y/N\n')
+            if skip_existing:
+                print(f'Skipping {file_name} as it already exists.')
+                continue
+
+            user_response = input(f'{file_name} already exists. Do you want to overwrite it? Y/N')
             if user_response.lower() == 'y':
-                print(f'Covering {file_name} to {save_path}')
+                print(f'Overwriting {file_name} to {save_path}')
                 gdown.download(file_url, save_path, quiet=False)
-                # download_file_from_google_drive(file_id, save_path)
             elif user_response.lower() == 'n':
                 print(f'Skipping {file_name}')
             else:
-                raise ValueError('Wrong input. Only accepts Y/N.')
+                raise ValueError('Invalid input. Only accepts Y/N.')
         else:
             print(f'Downloading {file_name} to {save_path}')
             gdown.download(file_url, save_path, quiet=False)
-            # download_file_from_google_drive(file_id, save_path)
 
 
 def imwrite(img, file_path, params=None, auto_mkdir=True):
