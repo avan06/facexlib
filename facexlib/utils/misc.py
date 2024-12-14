@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def download_from_url(url, file_name, save_dir=None):
+def download_from_url(url, file_name, save_dir=None, auto_extract_zip=True, match_file_name=True, remove_top_folder=True):
     """
     Downloads a file from a URL, either using gdown for Google Drive links
     or a different method for other URLs.
@@ -23,51 +23,98 @@ def download_from_url(url, file_name, save_dir=None):
     url (str): The URL from which to download the file.
     file_name (str): The name of the file to be saved.
     save_dir (str, optional): The directory where the file will be saved. If None, the current directory is used.
+    auto_extract_zip (bool): Only for Google Drive file. If True, automatically detects and extracts ZIP files.
+    match_file_name (bool): Only for Google Drive file. If True, only extracts files matching `file_name` from the ZIP archive.
+    remove_top_folder (bool): Only for Google Drive file. If True, removes the top-level folder inside the ZIP when extracting.
     """
     if 'drive.google.com' in url:
         print(f"Using gdown to download {file_name} from Google Drive.")
         file_id = url.split("id=")[-1]
-        download_pretrained_models({file_name: file_id}, save_dir, True)
+        download_pretrained_models({file_name: file_id}, save_dir, True, auto_extract_zip, match_file_name, remove_top_folder)
     else:
         print(f"Using load_file_from_url to download {file_name}.")
         load_file_from_url(url, file_name=file_name, save_dir=save_dir)
 
 
-def download_pretrained_models(file_ids, save_path_root, skip_existing=False):
+def download_pretrained_models(file_ids, save_path_root, skip_existing=False, auto_extract_zip=False, match_file_name=False, remove_top_folder=False):
     """
-    Downloads pretrained models from Google Drive using file IDs.
-    
+    Downloads pretrained models from Google Drive using file IDs and extracts ZIP files with options.
+
     Parameters:
     file_ids (dict): A dictionary where keys are file names and values are the corresponding Google Drive file IDs.
     save_path_root (str): The directory where the files will be saved.
     skip_existing (bool): If True, skips downloading files that already exist in the target directory.
+    auto_extract_zip (bool): If True, automatically detects and extracts ZIP files.
+    match_file_name (bool): If True, only extracts files matching `file_name` from the ZIP archive.
+    remove_top_folder (bool): If True, removes the top-level folder inside the ZIP when extracting.
     """
-    import os
-    import os.path as osp
     import gdown
+    import zipfile
+    import uuid
 
     os.makedirs(save_path_root, exist_ok=True)
 
     for file_name, file_id in file_ids.items():
         file_url = 'https://drive.google.com/uc?id=' + file_id
-        save_path = osp.abspath(osp.join(save_path_root, file_name))
-        
-        if osp.exists(save_path):
+        temp_file_name = str(uuid.uuid4())  # Generate a temporary name
+        temp_save_path = osp.abspath(osp.join(save_path_root, temp_file_name))
+
+        # Check if the file already exists
+        final_save_path = osp.abspath(osp.join(save_path_root, file_name))
+        if osp.exists(final_save_path):
             if skip_existing:
                 print(f'Skipping {file_name} as it already exists.')
                 continue
 
-            user_response = input(f'{file_name} already exists. Do you want to overwrite it? Y/N')
+            user_response = input(f'{file_name} already exists. Do you want to overwrite it? Y/N ')
             if user_response.lower() == 'y':
-                print(f'Overwriting {file_name} to {save_path}')
-                gdown.download(file_url, save_path, quiet=False)
+                print(f'Overwriting {file_name}')
             elif user_response.lower() == 'n':
                 print(f'Skipping {file_name}')
+                continue
             else:
                 raise ValueError('Invalid input. Only accepts Y/N.')
+
+        # Download the file with a temporary name
+        print(f'Downloading {file_name} to {temp_save_path}')
+        gdown.download(file_url, temp_save_path, quiet=False)
+
+        is_zip = False
+        if auto_extract_zip:
+            try:
+                with zipfile.ZipFile(temp_save_path, 'r') as zip_ref:
+                    # Adjust file paths to remove the top-level folder
+                    members = zip_ref.namelist()
+                    top_folder = os.path.commonpath(members)  # Get the top-level folder
+                    for member in members:
+                        member_name = os.path.basename(member)
+                        if match_file_name and member_name != file_name:
+                            continue
+
+                        # Create relative path
+                        relative_path = osp.relpath(member, top_folder) if remove_top_folder else member
+                        if relative_path == ".":  # Skip the folder itself
+                            continue
+                        target_path = osp.join(save_path_root, relative_path)
+                        # Ensure target directory exists
+                        if not member.endswith('/'):  # Skip directories
+                            os.makedirs(osp.dirname(target_path), exist_ok=True)
+                        # Extract the file
+                        with open(target_path, 'wb') as f:
+                            f.write(zip_ref.read(member))
+                        print(f'{file_name} extracted successfully with the top-level folder removed.')
+                        is_zip = True
+            except zipfile.BadZipFile:
+                print(f'{file_name} is not a ZIP file. No extraction performed.')
+        # Handle non-ZIP files: rename to the intended file name
+        if not is_zip:
+            os.rename(temp_save_path, final_save_path)
+            print(f'File saved as {final_save_path}')
         else:
-            print(f'Downloading {file_name} to {save_path}')
-            gdown.download(file_url, save_path, quiet=False)
+            # Delete the temporary ZIP file after extraction
+            os.remove(temp_save_path)
+            print(f'Removed temp ZIP file {temp_save_path}')
+
 
 
 def imwrite(img, file_path, params=None, auto_mkdir=True):
