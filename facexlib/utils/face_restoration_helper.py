@@ -248,8 +248,8 @@ class FaceRestoreHelper(object):
             import dlib
         except ImportError:
             print('Please install dlib by running:' 'conda install -c conda-forge dlib')
-        detection_path = load_file_from_url(url=detection_path, model_dir='facexlib/weights', progress=True, file_name=None, model_rootpath=model_rootpath)
-        landmark5_path = load_file_from_url(url=landmark5_path, model_dir='facexlib/weights', progress=True, file_name=None, model_rootpath=model_rootpath)
+        detection_path = load_file_from_url(url=detection_path, model_dir='facexlib/weights', progress=True, file_name=None, save_dir=model_rootpath)
+        landmark5_path = load_file_from_url(url=landmark5_path, model_dir='facexlib/weights', progress=True, file_name=None, save_dir=model_rootpath)
         face_detector = dlib.cnn_face_detection_model_v1(detection_path)
         shape_predictor_5 = dlib.shape_predictor(landmark5_path)
         return face_detector, shape_predictor_5
