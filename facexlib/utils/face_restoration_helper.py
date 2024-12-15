@@ -6,6 +6,7 @@ import numpy as np
 import os
 import torch
 from torchvision.transforms.functional import normalize
+from typing import Literal
 
 from facexlib.detection import init_detection_model
 from facexlib.parsing import init_parsing_model
@@ -94,13 +95,31 @@ class FaceRestoreHelper(object):
                  target_height=None,
                  face_size=512,
                  crop_ratio=(1, 1),
-                 det_model='retinaface_resnet50',
+                 det_model: Literal['retinaface_resnet50', 'YOLOv5l', 'YOLOv5n', 'dlib'] = 'retinaface_resnet50',
                  save_ext='png',
                  template_3points=False,
                  pad_blur=False,
                  use_parse=False,
                  device=None,
                  model_rootpath=None):
+        """
+        Initializes the helper class with the required parameters for face restoration.
+
+        Parameters:
+        upscale_factor (float, optional): Factor by which the input image will be upscaled.
+        target_width (int, optional): Target width for resizing the image. Mutually exclusive with `target_height`.
+        target_height (int, optional): Target height for resizing the image. Mutually exclusive with `target_width`.
+        face_size (int): Size of the cropped face region (default is 512).
+        crop_ratio (tuple): Aspect ratio (height, width) for cropping faces.
+        det_model (Literal): The face detection model to use. Possible values are:
+                             'retinaface_resnet50', 'YOLOv5l', 'YOLOv5n', 'dlib'. Default is 'retinaface_resnet50'.
+        save_ext (str): File extension for saving images (default is 'png').
+        template_3points (bool): Whether to use a 3-point alignment template.
+        pad_blur (bool): If True, applies padding and blurring to input images.
+        use_parse (bool): If True, enables the use of a face parsing model for mask generation.
+        device (torch.device, optional): Device on which the models will run (CPU or GPU).
+        model_rootpath (str, optional): Root directory for storing model weights.
+        """
 
         self.template_3points = template_3points  # improve robustness
         self.target_width = None
@@ -129,9 +148,8 @@ class FaceRestoreHelper(object):
 
         if self.det_model == 'dlib':
             # standard 5 landmarks for FFHQ faces with 1024 x 1024
-            self.face_template = np.array([[686.77227723, 488.62376238], [586.77227723, 493.59405941],
-                                        [337.91089109, 488.38613861], [437.95049505, 493.51485149],
-                                        [513.58415842, 678.5049505]])
+            # in order, the center of the right eye, the center of the left eye, the tip of the nose, the left corner of the mouth, and the right corner of the mouth.
+            self.face_template = np.array([[686.77227723, 488.62376238], [586.77227723, 493.59405941], [337.91089109, 488.38613861], [437.95049505, 493.51485149], [513.58415842, 678.5049505]])
             self.face_template = self.face_template / (1024 // face_size)
         elif self.template_3points:
             self.face_template = np.array([[192, 240], [319, 240], [257, 371]])
