@@ -345,8 +345,10 @@ class FaceRestoreHelper(object):
             bboxes = bboxes / scale
 
         for bbox in bboxes:
+            # https://github.com/xinntao/facexlib/pull/29
+            # [bbox_x1, bbox_y1, bbox_x2, bbox_y2, confidence_score, eye_1_x, eye_1_y,  eye_2_x, eye_2_y, nose_x, nose_y, lip_1_x, lip_1_y,  lip_2_x, lip_2_y]
             # remove faces with too small eye distance: side faces or too small faces
-            eye_dist = np.linalg.norm([bbox[6] - bbox[8], bbox[7] - bbox[9]])
+            eye_dist = np.linalg.norm([bbox[5] - bbox[7], bbox[6] - bbox[8]])
             if eye_dist_threshold is not None and (eye_dist < eye_dist_threshold):
                 continue
 
